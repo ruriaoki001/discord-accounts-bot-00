@@ -5,6 +5,14 @@ const { initializeSync } = require("./githubSync");
 const { exchangeCode, getUserInfo, saveUser, getAllUsers, refreshToken } = require("./auth");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} = require("discord.js");
+
+
 const app = express();
 
 // --- GitHub Sync ---
