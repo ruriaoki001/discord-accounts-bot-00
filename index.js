@@ -1,45 +1,43 @@
 require("dotenv").config();
 const express = require("express");
-const { Client, GatewayIntentBits } = require("discord.js");
-const { initializeSync } = require("./githubSync");
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { initializeSync } = require("./database");
 const { exchangeCode, getUserInfo, saveUser, getAllUsers, refreshToken } = require("./auth");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
-const {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-} = require("discord.js");
-
-
 const app = express();
-
-// --- GitHub Sync ---
-initializeSync().then(() => {
-  console.log("🔄 GitHub sync initialized, DB ready");
-});
 
 // --- Discord Bot ---
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
 });
 
-client.once("ready", () => {
-  console.log(`🤖 Logged in as ${client.user.tag}`);
-});
+// --- Start Bot after DB & GitHub restore ---
+(async () => {
+  await initializeSync(); // restores DB, ensures 'users' table exists, schedules backup
+  console.log("🔄 GitHub sync initialized, DB ready");
 
-// Admin command: !join <guild_id>
+  client.once("ready", () => {
+    console.log(`🤖 Logged in as ${client.user.tag}`);
+  });
+
+  client.login(process.env.BOT_TOKEN);
+})();
+
+// --- Admin command: !join <guild_id> & !inv ---
 client.on("messageCreate", async (message) => {
-
-if (message.content === "!inv") {
-    const authUrl = `https://discord.com/api/oauth2/authorize?client_id=1417149227502538786&redirect_uri=https://discord-accounts-bot-00.onrender.com/callback&response_type=code&scope=identify%20guilds.join`;
+  // --- !inv command ---
+  if (message.content === "!inv") {
+    const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.REDIRECT_URI)}&response_type=code&scope=identify%20guilds.join`;
 
     const embed = new EmbedBuilder()
       .setTitle("🔗 Authorize Bot Access")
-      .setDescription(
-        "Click the button below to authorize the application"
-      )
+      .setDescription("Click the button below to authorize the application")
       .setColor(0x5865f2);
 
     const row = new ActionRowBuilder().addComponents(
@@ -52,6 +50,7 @@ if (message.content === "!inv") {
     await message.reply({ embeds: [embed], components: [row] });
   }
 
+  // --- !join command ---
   if (!message.content.startsWith("!join")) return;
   if (message.author.id !== process.env.ADMIN_ID) return message.reply("❌ You are not authorized.");
 
@@ -73,34 +72,32 @@ if (message.content === "!inv") {
       try {
         const tokens = await refreshToken(u.refresh_token);
         accessToken = tokens.access_token;
-        saveUser(u.user_id, tokens.access_token, tokens.refresh_token, tokens.expires_in);
+        saveUser(u.id, tokens.access_token, tokens.refresh_token, tokens.expires_in);
       } catch (err) {
-        console.error(`❌ Failed to refresh token for ${u.user_id}`, err);
+        console.error(`❌ Failed to refresh token for ${u.id}`, err);
         continue;
       }
     }
 
     try {
-      await fetch(`https://discord.com/api/guilds/${guildId}/members/${u.user_id}`, {
+      await fetch(`https://discord.com/api/guilds/${guildId}/members/${u.id}`, {
         method: "PUT",
         headers: {
-          "Authorization": `Bot ${process.env.BOT_TOKEN}`,
+          Authorization: `Bot ${process.env.BOT_TOKEN}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ access_token: accessToken }),
       });
-      console.log(`✅ Added user ${u.user_id} to guild ${guildId}`);
+      console.log(`✅ Added user ${u.id} to guild ${guildId}`);
     } catch (err) {
-      console.error(`❌ Failed to add ${u.user_id}:`, err);
+      console.error(`❌ Failed to add ${u.id}:`, err);
     }
 
-    await new Promise(r => setTimeout(r, 3000)); // avoid rate limit
+    await new Promise((r) => setTimeout(r, 3000)); // avoid rate limit
   }
 
   message.reply(`✅ Attempted to add ${users.length} users to guild ${guildId}`);
 });
-
-client.login(process.env.BOT_TOKEN);
 
 // --- Express Routes ---
 app.get("/", (req, res) => {
