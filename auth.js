@@ -1,7 +1,6 @@
 // Fix fetch for Node.js (Replit compatible)
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
-const db = require("./db");
-const { backupDb } = require("./githubSync");
+const { getDb, backupDb } = require("./database");
 
 // Exchange code for access + refresh tokens
 async function exchangeCode(code) {
@@ -50,18 +49,25 @@ async function getUserInfo(accessToken) {
 
 // Save user to DB
 function saveUser(userId, accessToken, refreshToken, expiresIn) {
+  const db = getDb();
   const expiresAt = Date.now() + expiresIn * 1000;
+
   db.prepare(`
-    INSERT OR REPLACE INTO users (user_id, access_token, refresh_token, expires_at)
+    INSERT OR REPLACE INTO users (id, access_token, refresh_token, expires_at)
     VALUES (?, ?, ?, ?)
   `).run(userId, accessToken, refreshToken, expiresAt);
 
   console.log(`💾 Saved user ${userId} to DB`);
-  backupDb(); // auto-backup after new user
+
+  // Backup immediately after adding a new user
+  backupDb();
 }
 
+// Get all users
 function getAllUsers() {
+  const db = getDb();
   return db.prepare("SELECT * FROM users").all();
 }
 
 module.exports = { exchangeCode, refreshToken, getUserInfo, saveUser, getAllUsers };
+
