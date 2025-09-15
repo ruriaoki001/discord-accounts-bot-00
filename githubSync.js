@@ -6,10 +6,11 @@ const owner = process.env.GITHUB_USERNAME || "YOUR_GITHUB_USERNAME";
 const repo = process.env.GITHUB_REPO || "YOUR_REPO_NAME";
 const branch = "main";
 
-// SQLite database file in root
+// Root-level DB
 const localDbPath = "./users.db";
 const remoteDbPath = "users.db";
 
+// Restore DB from GitHub
 async function restoreDb() {
   try {
     const { data: file } = await octokit.repos.getContent({
@@ -25,10 +26,11 @@ async function restoreDb() {
     console.log("✅ SQLite DB restored from GitHub");
   } catch {
     console.log("📂 No DB found on GitHub, starting fresh");
-    fs.writeFileSync(localDbPath, "");
+    if (!fs.existsSync(localDbPath)) fs.writeFileSync(localDbPath, "");
   }
 }
 
+// Backup DB to GitHub
 async function backupDb() {
   try {
     if (!fs.existsSync(localDbPath)) {
@@ -67,10 +69,11 @@ async function backupDb() {
   }
 }
 
+// Initialize sync
 async function initializeSync() {
   if (process.env.GITHUB_TOKEN && process.env.GITHUB_USERNAME && process.env.GITHUB_REPO) {
     await restoreDb();
-    setInterval(backupDb, 1000 * 60 * 5);
+    setInterval(backupDb, 1000 * 60 * 5); // backup every 5 min
   } else {
     console.log("⚠️ GitHub sync not configured (missing env vars)");
   }
