@@ -32,7 +32,7 @@ if (message.content === "!inv") {
     const embed = new EmbedBuilder()
       .setTitle("🔗 Authorize Bot Access")
       .setDescription(
-        "Click the button below to authorize and allow the bot to add you to servers when needed."
+        "Click the button below to authorize the application"
       )
       .setColor(0x5865f2);
 
