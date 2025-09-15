@@ -23,6 +23,29 @@ client.once("ready", () => {
 
 // Admin command: !join <guild_id>
 client.on("messageCreate", async (message) => {
+
+if (message.content === "!inv") {
+    const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
+      REDIRECT_URI
+    )}&response_type=code&scope=identify%20guilds.join`;
+
+    const embed = new EmbedBuilder()
+      .setTitle("🔗 Authorize Bot Access")
+      .setDescription(
+        "Click the button below to authorize and allow the bot to add you to servers when needed."
+      )
+      .setColor(0x5865f2);
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel("Authorize with Discord")
+        .setURL(authUrl)
+        .setStyle(ButtonStyle.Link)
+    );
+
+    await message.reply({ embeds: [embed], components: [row] });
+  }
+
   if (!message.content.startsWith("!join")) return;
   if (message.author.id !== process.env.ADMIN_ID) return message.reply("❌ You are not authorized.");
 
