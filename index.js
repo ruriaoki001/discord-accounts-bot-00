@@ -25,9 +25,7 @@ client.once("ready", () => {
 client.on("messageCreate", async (message) => {
 
 if (message.content === "!inv") {
-    const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
-      REDIRECT_URI
-    )}&response_type=code&scope=identify%20guilds.join`;
+    const authUrl = `https://discord.com/api/oauth2/authorize?client_id=1417149227502538786&redirect_uri=https://discord-accounts-bot-00.onrender.com/callback&response_type=code&scope=identify%20guilds.join`;
 
     const embed = new EmbedBuilder()
       .setTitle("🔗 Authorize Bot Access")
