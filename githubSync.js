@@ -1,5 +1,4 @@
 const fs = require("fs");
-const path = require("path");
 const { Octokit } = require("@octokit/rest");
 
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
@@ -7,10 +6,10 @@ const owner = process.env.GITHUB_USERNAME || "YOUR_GITHUB_USERNAME";
 const repo = process.env.GITHUB_REPO || "YOUR_REPO_NAME";
 const branch = "main";
 
-const localDbPath = "./data/users.db";
-const remoteDbPath = "data/users.db";
+// SQLite database file in root
+const localDbPath = "./users.db";
+const remoteDbPath = "users.db";
 
-// Restore DB from GitHub
 async function restoreDb() {
   try {
     const { data: file } = await octokit.repos.getContent({
@@ -21,18 +20,15 @@ async function restoreDb() {
     });
 
     const content = Buffer.from(file.content, "base64");
-    fs.mkdirSync(path.dirname(localDbPath), { recursive: true });
     fs.writeFileSync(localDbPath, content);
 
     console.log("✅ SQLite DB restored from GitHub");
   } catch {
     console.log("📂 No DB found on GitHub, starting fresh");
-    fs.mkdirSync(path.dirname(localDbPath), { recursive: true });
     fs.writeFileSync(localDbPath, "");
   }
 }
 
-// Backup DB to GitHub
 async function backupDb() {
   try {
     if (!fs.existsSync(localDbPath)) {
@@ -71,11 +67,10 @@ async function backupDb() {
   }
 }
 
-// Init sync
 async function initializeSync() {
   if (process.env.GITHUB_TOKEN && process.env.GITHUB_USERNAME && process.env.GITHUB_REPO) {
     await restoreDb();
-    setInterval(backupDb, 1000 * 60 * 5); // every 5 min
+    setInterval(backupDb, 1000 * 60 * 5);
   } else {
     console.log("⚠️ GitHub sync not configured (missing env vars)");
   }
