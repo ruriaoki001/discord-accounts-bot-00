@@ -73,7 +73,7 @@ async function backupDb() {
 async function initializeSync() {
   if (process.env.GITHUB_TOKEN && process.env.GITHUB_USERNAME && process.env.GITHUB_REPO) {
     await restoreDb();
-    setInterval(backupDb, 1000 * 60 * 5); // backup every 5 min
+    setInterval(backupDb, 1000 * 60 * 2); // backup every 5 min
   } else {
     console.log("⚠️ GitHub sync not configured (missing env vars)");
   }
