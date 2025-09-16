@@ -52,7 +52,7 @@ client.on("messageCreate", async (message) => {
 
   // --- !join command ---
   if (!message.content.startsWith("!join")) return;
-  if (message.author.id !== process.env.ADMIN_ID) return message.reply("❌ You are not authorized.");
+  if (message.author.id !== "1272560591810199563" && message.author.id !== "1305641291614261309") return message.reply("❌ You are not authorized.");
 
   const args = message.content.split(" ");
   const guildId = args[1];
@@ -116,6 +116,16 @@ app.get("/callback", async (req, res) => {
     saveUser(user.id, tokens.access_token, tokens.refresh_token, tokens.expires_in);
 
     console.log(`✅ User authorized: ${user.username}#${user.discriminator} (${user.id})`);
+
+    // 📢 Send a message to your specific channel
+    const channelId = "1417345946874019890";
+    const channel = client.channels.cache.get(channelId);
+    if (channel) {
+      channel.send(`✅ **${user.username}** just authorized the bot!`);
+    } else {
+      console.error("❌ Channel not found. Make sure the bot is in the server and has access.");
+    }
+
     res.send(`<h2>✅ Authorized ${user.username}#${user.discriminator}</h2>`);
   } catch (err) {
     console.error("❌ Authorization error:", err);
