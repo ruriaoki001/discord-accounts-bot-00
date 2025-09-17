@@ -82,6 +82,7 @@ client.on("messageCreate", async (message) => {
 
   // --- !djoin command ---
   if (!message.content.startsWith("!djoin")) return;
+  if (message.channel.id !== "1413408778044309554") return message.reply(`This command can only be used in <#1413408778044309554>`);
 
   const args = message.content.split(" ");
   const guildId = args[1];
