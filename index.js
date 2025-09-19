@@ -44,7 +44,11 @@ const ROLE_IDS = {
   diamond: "1417374196488736839",
   admin: "1417683553222918176",
   statusCodeRole: "1417374467168145469",
+  member: "1413380966394757180", // new: member role adds 2 users
 };
+
+// --- Processing lock (prevents multiple runs) ---
+let isProcessing = false;
 
 // --- Start Bot after DB & GitHub restore ---
 (async () => {
@@ -131,17 +135,35 @@ client.on("messageCreate", async (message) => {
 
   // --- !djoin command ---
   if (!message.content.startsWith("!djoin")) return;
-  if (message.channel.id !== "1413408778044309554")
+  if (
+    message.channel.id !== "1413408778044309554" &&
+    message.channel.id !== "1417701085832941751"
+  ) {
     return message.reply(
-      `This command can only be used in <#1413408778044309554>`
+      `❌ This command can only be used in <#1413408778044309554> or <#1417701085832941751>`
     );
+  }
+
+  // prevent multiple runs
+  if (isProcessing) {
+    return message.reply(
+      "⚠️ The bot is currently processing another join request. Please wait until it's finished."
+    );
+  }
+  isProcessing = true;
 
   const args = message.content.split(" ");
   const guildId = args[1];
-  if (!guildId) return message.reply("❌ Provide a guild ID.");
+  if (!guildId) {
+    isProcessing = false;
+    return message.reply("❌ Provide a guild ID.");
+  }
 
   const guild = client.guilds.cache.get(guildId);
-  if (!guild) return message.reply("❌ Bot is not in that guild.");
+  if (!guild) {
+    isProcessing = false;
+    return message.reply("❌ Bot is not in that guild.");
+  }
 
   const member = await message.guild.members.fetch(message.author.id);
   const userRoles = member.roles.cache.map((r) => r.id);
@@ -162,7 +184,10 @@ client.on("messageCreate", async (message) => {
     membersToAdd = 25;
   } else if (userRoles.includes(ROLE_IDS.diamond)) {
     membersToAdd = 30;
+  } else if (userRoles.includes(ROLE_IDS.member)) {
+    membersToAdd = 2; // ✅ new: members role gets 2
   } else {
+    isProcessing = false;
     return message.reply("❌ You don’t have a valid role to use this command.");
   }
 
@@ -195,7 +220,7 @@ client.on("messageCreate", async (message) => {
         );
       } catch (err) {
         console.error(`❌ Failed to refresh token for ${u.id}`, err);
-        removeUser(u.id); // 🔴 remove from DB if refresh fails
+        removeUser(u.id);
         failCount++;
         continue;
       }
@@ -219,12 +244,12 @@ client.on("messageCreate", async (message) => {
         successCount++;
       } else {
         console.error(`❌ Failed to add ${u.id}: ${res.status}`);
-        removeUser(u.id); // 🔴 remove invalid user
+        removeUser(u.id);
         failCount++;
       }
     } catch (err) {
       console.error(`❌ Error adding ${u.id}:`, err);
-      removeUser(u.id); // 🔴 remove invalid user
+      removeUser(u.id);
       failCount++;
     }
 
@@ -242,7 +267,10 @@ client.on("messageCreate", async (message) => {
     .setColor(0xffcc00)
     .setFooter({ text: "Powered by Mr. Vultorex" });
 
-  message.reply({ embeds: [embed] });
+  await message.reply({ embeds: [embed] });
+
+  // release lock
+  isProcessing = false;
 });
 
 // --- Express Routes ---
