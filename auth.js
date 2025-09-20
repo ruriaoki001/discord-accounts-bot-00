@@ -69,5 +69,22 @@ function getAllUsers() {
   return db.prepare("SELECT * FROM users").all();
 }
 
-module.exports = { exchangeCode, refreshToken, getUserInfo, saveUser, getAllUsers };
+// ❌ Remove user from DB
+function removeUser(userId) {
+  const db = getDb();
+  db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+  console.log(`🗑️ Removed user ${userId} from DB`);
 
+  // Optional: backup after deletion too
+  backupDb();
+}
+
+// Export all functions
+module.exports = {
+  exchangeCode,
+  refreshToken,
+  getUserInfo,
+  saveUser,
+  getAllUsers,
+  removeUser, // ✅ now exported
+};
