@@ -9,7 +9,10 @@ const {
   ButtonBuilder,
   ButtonStyle,
 } = require("discord.js");
-const { initializeSync } = require("./database");
+const {
+  initializeSync,
+  ensureLocalBlacklist
+} = require("./database");
 const {
   exchangeCode,
   getUserInfo,
