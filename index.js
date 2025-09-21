@@ -116,13 +116,13 @@ client.on("messageCreate", async (message) => {
   if (message.content === "!dstock") {
     const member = await message.guild.members.fetch(message.author.id);
     if (!member.roles.cache.has(ROLE_IDS.admin)) {
-      return message.reply("❌ You don’t have permission to use this command.");
+      return message.reply("You are not allowed to use this command!");
     }
 
     const allUsers = getAllUsers();
     const embed = new EmbedBuilder()
-      .setTitle("📦 Stock Report")
-      .setDescription(`Total available authorized users: **${allUsers.length}**`)
+      .setTitle("📦 Stock:")
+      .setDescription(`Authorized Members: **${allUsers.length}**`)
       .setColor(0x00ff99);
 
     return message.reply({ embeds: [embed] });
@@ -132,13 +132,13 @@ client.on("messageCreate", async (message) => {
   if (message.content.startsWith("!dblacklist")) {
     const member = await message.guild.members.fetch(message.author.id);
     if (!member.roles.cache.has(ROLE_IDS.admin)) {
-      return message.reply("❌ You don’t have permission to use this command.");
+      return message.reply("You are not allowed to use this command!");
     }
 
     const args = message.content.split(" ");
     const serverId = args[1];
     if (!serverId) {
-      return message.reply("❌ Please provide a server ID to blacklist.");
+      return message.reply("You are not allowed to use this command!");
     }
 
     blacklistedServers.add(serverId);
@@ -147,17 +147,14 @@ client.on("messageCreate", async (message) => {
 
   // --- !djoin <serverId> <amount?> ---
   if (!message.content.startsWith("!djoin")) return;
-  if (
-    message.channel.id !== "1413408778044309554" &&
-    message.channel.id !== "1417701085832941751"
-  ) {
+  if (message.channel.id !== "1413408778044309554") {
     return message.reply(
-      `❌ This command can only be used in <#1413408778044309554> or <#1417701085832941751>`
+      `This command can only be used in <#1413408778044309554>`
     );
   }
 
   if (isProcessing) {
-    return message.reply("⚠️ Bot is busy processing another join request.");
+    return message.reply("⚠️ Currently processing another join request. Try again in a bit.");
   }
   isProcessing = true;
 
@@ -167,7 +164,7 @@ client.on("messageCreate", async (message) => {
 
   if (!guildId) {
     isProcessing = false;
-    return message.reply("❌ Provide a guild ID.");
+    return message.reply("Provide a Server ID to add members to");
   }
 
   if (blacklistedServers.has(guildId)) {
@@ -178,9 +175,10 @@ client.on("messageCreate", async (message) => {
   const guild = client.guilds.cache.get(guildId);
   if (!guild) {
     isProcessing = false;
-    return message.reply("❌ Bot is not in that guild.");
+    return message.reply("Cannot add members as I am not in that server, add me through <#1417388718209368074>");
   }
 
+  message.reply("Started adding members to your server.. please wait..")
   const member = await message.guild.members.fetch(message.author.id);
   const userRoles = member.roles.cache.map((r) => r.id);
 
@@ -208,7 +206,7 @@ client.on("messageCreate", async (message) => {
     membersToAdd = 2;
   } else {
     isProcessing = false;
-    return message.reply("❌ You don’t have a valid role to use this command.");
+    return message.reply("You don’t have a valid role to use this command.");
   }
 
   const allUsers = getAllUsers();
@@ -267,15 +265,15 @@ client.on("messageCreate", async (message) => {
       failCount++;
     }
 
-    await new Promise((r) => setTimeout(r, 3000));
+    await new Promise((r) => setTimeout(r, 2500));
   }
 
   const embed = new EmbedBuilder()
-      .setTitle("👥 Adding Members Report")
+      .setTitle("👥 Members Report")
     .addFields(
       { name: "Total Attempted", value: `${users.length}`, inline: true },
       { name: "✅ Successful", value: `${successCount}`, inline: true },
-      { name: "❌ Failed (removed)", value: `${failCount}`, inline: true },
+      { name: "❌ Failed", value: `${failCount}`, inline: true },
       { name: "Server ID", value: guildId, inline: true }
     )
     .setColor(0xffcc00)
@@ -283,7 +281,6 @@ client.on("messageCreate", async (message) => {
 
   await message.reply({ embeds: [embed] });
 
-  // ✅ Unlock processing
   isProcessing = false;
 });
 
