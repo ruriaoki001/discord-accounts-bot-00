@@ -125,7 +125,6 @@ async function backupDb() {
       sha: dbSha,
       branch,
     });
-    console.log("✅ users.db backed up to GitHub");
   } catch (err) {
     console.error("❌ Failed to back up users.db:", err);
   }
@@ -157,7 +156,6 @@ async function backupDb() {
       sha: blSha,
       branch,
     });
-    console.log("✅ blacklist.json backed up to GitHub");
   } catch (err) {
     console.error("❌ Failed to back up blacklist.json:", err);
   }
