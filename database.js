@@ -3,6 +3,7 @@ const { Octokit } = require("@octokit/rest");
 const Database = require("better-sqlite3");
 
 const dbPath = "./users.db";
+const blacklistPath = "./blacklist.json";
 let db = null;
 
 // GitHub config
@@ -12,11 +13,10 @@ const repo = process.env.GITHUB_REPO;
 const branch = "main";
 
 // --- Database functions ---
-
 function initDatabase() {
   // Ensure DB file exists
   if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, "");
-  
+
   // Open DB
   db = new Database(dbPath);
 
@@ -40,11 +40,11 @@ function getDb() {
 }
 
 // --- GitHub sync functions ---
-
 async function restoreDb() {
   if (!process.env.GITHUB_TOKEN || !process.env.GITHUB_USERNAME || !process.env.GITHUB_REPO) {
     console.log("⚠️ GitHub sync not configured, initializing local DB only");
     initDatabase();
+    ensureLocalBlacklist();
     return;
   }
 
@@ -64,18 +64,44 @@ async function restoreDb() {
     if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, "");
   }
 
-  // Ensure table exists after restore
+  try {
+    const { data: file } = await octokit.repos.getContent({
+      owner,
+      repo,
+      path: "blacklist.json",
+      ref: branch,
+    });
+
+    const content = Buffer.from(file.content, "base64");
+    fs.writeFileSync(blacklistPath, content);
+    console.log("✅ blacklist.json restored from GitHub");
+  } catch {
+    console.log("📂 No blacklist.json found on GitHub, creating new one");
+    ensureLocalBlacklist();
+  }
+
+  // Ensure DB table exists after restore
   initDatabase();
 }
 
+// Ensure blacklist.json exists
+function ensureLocalBlacklist() {
+  if (!fs.existsSync(blacklistPath)) {
+    fs.writeFileSync(blacklistPath, "[]");
+    console.log("📄 Created local blacklist.json");
+  }
+}
+
+// Backup users.db and blacklist.json
 async function backupDb() {
   if (!fs.existsSync(dbPath)) {
     console.log("📂 No local DB to backup");
     return;
   }
 
-  const content = fs.readFileSync(dbPath);
-  let sha;
+  // --- users.db ---
+  const dbContent = fs.readFileSync(dbPath);
+  let dbSha;
 
   try {
     const { data: file } = await octokit.repos.getContent({
@@ -84,9 +110,9 @@ async function backupDb() {
       path: "users.db",
       ref: branch,
     });
-    sha = file.sha;
+    dbSha = file.sha;
   } catch {
-    console.log("📂 File not found in repo, will create new one.");
+    console.log("📂 users.db not found in repo, will create new one.");
   }
 
   try {
@@ -95,22 +121,61 @@ async function backupDb() {
       repo,
       path: "users.db",
       message: "Auto-backup SQLite DB",
-      content: content.toString("base64"),
-      sha,
+      content: dbContent.toString("base64"),
+      sha: dbSha,
       branch,
     });
-
-    console.log("✅ SQLite DB pushed to GitHub!");
+    console.log("✅ users.db backed up to GitHub");
   } catch (err) {
-    console.error("❌ Backup failed:", err);
+    console.error("❌ Failed to back up users.db:", err);
+  }
+
+  // --- blacklist.json ---
+  ensureLocalBlacklist(); // make sure file exists
+  const blContent = fs.readFileSync(blacklistPath);
+  let blSha;
+
+  try {
+    const { data: file } = await octokit.repos.getContent({
+      owner,
+      repo,
+      path: "blacklist.json",
+      ref: branch,
+    });
+    blSha = file.sha;
+  } catch {
+    console.log("📂 blacklist.json not found in repo, will create new one.");
+  }
+
+  try {
+    await octokit.repos.createOrUpdateFileContents({
+      owner,
+      repo,
+      path: "blacklist.json",
+      message: "Auto-backup blacklist.json",
+      content: blContent.toString("base64"),
+      sha: blSha,
+      branch,
+    });
+    console.log("✅ blacklist.json backed up to GitHub");
+  } catch (err) {
+    console.error("❌ Failed to back up blacklist.json:", err);
   }
 }
 
 async function initializeSync() {
   await restoreDb();
+
   // Backup every 1 minute
   setInterval(backupDb, 1000 * 60 * 1);
   console.log("🔄 GitHub backup scheduled every 1 minute");
 }
 
-module.exports = { initDatabase, getDb, restoreDb, backupDb, initializeSync };
+module.exports = {
+  initDatabase,
+  getDb,
+  restoreDb,
+  backupDb,
+  initializeSync,
+  ensureLocalBlacklist,
+};
