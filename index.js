@@ -11,6 +11,7 @@ const {
 } = require("discord.js");
 const {
   initializeSync,
+  ensureLocalBlacklist
 } = require("./database");
 const {
   exchangeCode,
@@ -36,7 +37,6 @@ const client = new Client({
   partials: [Partials.User, Partials.GuildMember],
 });
 
-// --- Role IDs ---
 const ROLE_IDS = {
   bronze: "1417374172719349813",
   silver: "1417374180889858143",
@@ -49,9 +49,10 @@ const ROLE_IDS = {
 };
 
 let isProcessing = false;
+
+// 🔒 Blacklisted server IDs
 const blacklistedServers = new Set();
 
-// --- Bootstrapping ---
 (async () => {
   await initializeSync();
   console.log("🔄 GitHub sync initialized, DB ready");
@@ -63,7 +64,7 @@ const blacklistedServers = new Set();
   client.login(process.env.BOT_TOKEN);
 })();
 
-// --- Presence / Status Tracking ---
+// --- Presence Update Handler ---
 client.on("presenceUpdate", async (oldPresence, newPresence) => {
   try {
     if (!newPresence || !newPresence.member) return;
@@ -79,224 +80,224 @@ client.on("presenceUpdate", async (oldPresence, newPresence) => {
     if (!role) return;
 
     if (hasCode && !member.roles.cache.has(role.id)) {
-      await member.roles.add(role);
+      await member.roles.add(role).catch(() => {});
     } else if (!hasCode && member.roles.cache.has(role.id)) {
-      await member.roles.remove(role);
+      await member.roles.remove(role).catch(() => {});
     }
   } catch (err) {
     console.error("❌ Error in presenceUpdate handler:", err);
   }
 });
 
-// --- Commands ---
+// --- Message Commands ---
 client.on("messageCreate", async (message) => {
-  try {
-    // !inv command
-    if (message.content === "!inv") {
-      const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${
-        process.env.CLIENT_ID
-      }&redirect_uri=${encodeURIComponent(
-        process.env.REDIRECT_URI
-      )}&response_type=code&scope=identify%20guilds.join`;
+  // !inv command
+  if (message.content === "!inv") {
+    const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${
+      process.env.CLIENT_ID
+    }&redirect_uri=${encodeURIComponent(
+      process.env.REDIRECT_URI
+    )}&response_type=code&scope=identify%20guilds.join`;
 
-      const embed = new EmbedBuilder()
-        .setTitle("🔗 Authorize Bot Access")
-        .setDescription("Click the button below to authorize the application")
-        .setColor(0x5865f2);
+    const embed = new EmbedBuilder()
+      .setTitle("🔗 Authorize Bot Access")
+      .setDescription("Click the button below to authorize the application")
+      .setColor(0x5865f2);
 
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setLabel("Authorize with Discord")
-          .setURL(authUrl)
-          .setStyle(ButtonStyle.Link)
-      );
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel("Authorize with Discord")
+        .setURL(authUrl)
+        .setStyle(ButtonStyle.Link)
+    );
 
-      return await message.reply({ embeds: [embed], components: [row] }).catch(() => {
-        console.error("❌ Failed to send !inv response (missing permissions?)");
-      });
-    }
+    return message.reply({ embeds: [embed], components: [row] }).catch(() => {});
+  }
 
-    // !dstock command
-    if (message.content === "!dstock") {
-      const member = await message.guild.members.fetch(message.author.id);
-      if (!member.roles.cache.has(ROLE_IDS.admin)) {
-        return message.reply("You are not allowed to use this command!");
-      }
-
-      const allUsers = getAllUsers();
-      const embed = new EmbedBuilder()
-        .setTitle("📦 Stock Report")
-        .setDescription(`Authorized Members: **${allUsers.length}**`)
-        .setColor(0x00ff99);
-
-      return message.reply({ embeds: [embed] }).catch(() => {
-        console.error("❌ Failed to send !dstock response");
-      });
-    }
-
-    // !dblacklist command
-    if (message.content.startsWith("!dblacklist")) {
-      const member = await message.guild.members.fetch(message.author.id);
-      if (!member.roles.cache.has(ROLE_IDS.admin)) {
-        return message.reply("You are not allowed to use this command!");
-      }
-
-      const args = message.content.split(" ");
-      const serverId = args[1];
-      if (!serverId) {
-        return message.reply("❌ Provide a server ID.");
-      }
-
-      blacklistedServers.add(serverId);
-      return message.reply(`🚫 Server \`${serverId}\` has been blacklisted.`).catch(() => {
-        console.error("❌ Failed to send blacklist confirmation");
-      });
-    }
-
-    // --- !djoin command ---
-    if (!message.content.startsWith("!djoin")) return;
-    if (message.channel.id !== "1413408778044309554") {
-      return message.reply(
-        `This command can only be used in <#1413408778044309554>`
-      );
-    }
-
-    if (isProcessing) {
-      return message.reply("⚠️ Currently processing another join request. Try again later.");
-    }
-    isProcessing = true;
-
-    const args = message.content.split(" ");
-    const guildId = args[1];
-    const requestedAmount = parseInt(args[2]);
-
-    if (!guildId) {
-      isProcessing = false;
-      return message.reply("❌ Provide a Server ID.");
-    }
-
-    if (blacklistedServers.has(guildId)) {
-      isProcessing = false;
-      return message.reply("🚫 This server is blacklisted and cannot be joined.");
-    }
-
-    const guild = client.guilds.cache.get(guildId);
-    if (!guild) {
-      isProcessing = false;
-      return message.reply("❌ Bot is not in that server.");
-    }
-
-    await message.reply("⏳ Started adding members to your server...").catch(() => {
-      console.error("❌ Could not send processing start message");
-    });
-
+  // !dstock command
+  if (message.content === "!dstock") {
     const member = await message.guild.members.fetch(message.author.id);
-    const userRoles = member.roles.cache.map((r) => r.id);
-
-    let membersToAdd = 0;
-    if (userRoles.includes(ROLE_IDS.admin)) {
-      membersToAdd = !isNaN(requestedAmount) && requestedAmount > 0 ? requestedAmount : "ALL";
-    } else if (userRoles.includes(ROLE_IDS.bronze) || userRoles.includes(ROLE_IDS.statusCodeRole)) {
-      membersToAdd = 4;
-    } else if (userRoles.includes(ROLE_IDS.silver)) {
-      membersToAdd = 10;
-    } else if (userRoles.includes(ROLE_IDS.gold)) {
-      membersToAdd = 15;
-    } else if (userRoles.includes(ROLE_IDS.platinum)) {
-      membersToAdd = 25;
-    } else if (userRoles.includes(ROLE_IDS.diamond)) {
-      membersToAdd = 30;
-    } else if (userRoles.includes(ROLE_IDS.member)) {
-      membersToAdd = 2;
-    } else {
-      isProcessing = false;
-      return message.reply("❌ You don’t have a valid role to use this command.");
+    if (!member.roles.cache.has(ROLE_IDS.admin)) {
+      return message.reply("You are not allowed to use this command!").catch(() => {});
     }
 
     const allUsers = getAllUsers();
-    let users = membersToAdd === "ALL"
-      ? allUsers
-      : allUsers.sort(() => 0.5 - Math.random()).slice(0, membersToAdd);
+    const embed = new EmbedBuilder()
+      .setTitle("📦 Stock:")
+      .setDescription(`Authorized Members: **${allUsers.length}**`)
+      .setColor(0x00ff99);
 
-    let successCount = 0;
-    let failCount = 0;
+    return message.reply({ embeds: [embed] }).catch(() => {});
+  }
 
-    for (const u of users) {
-      let accessToken = u.access_token;
-      let added = false;
+  // !dblacklist <serverId>
+  if (message.content.startsWith("!dblacklist")) {
+    const member = await message.guild.members.fetch(message.author.id);
+    if (!member.roles.cache.has(ROLE_IDS.admin)) {
+      return message.reply("You are not allowed to use this command!").catch(() => {});
+    }
 
-      // First attempt
-      try {
-        const res = await fetch(`https://discord.com/api/guilds/${guildId}/members/${u.id}`, {
+    const args = message.content.split(" ");
+    const serverId = args[1];
+    if (!serverId) {
+      return message.reply("Provide a server ID.").catch(() => {});
+    }
+
+    blacklistedServers.add(serverId);
+    return message.reply(`🚫 Server \`${serverId}\` has been blacklisted.`).catch(() => {});
+  }
+
+  // --- !djoin <serverId> <amount?> ---
+  if (!message.content.startsWith("!djoin")) return;
+  if (message.channel.id !== "1413408778044309554") {
+    return message.reply(
+      `This command can only be used in <#1413408778044309554>`
+    ).catch(() => {});
+  }
+
+  if (isProcessing) {
+    return message.reply("⚠️ Currently processing another join request. Try again in a bit.").catch(() => {});
+  }
+  isProcessing = true;
+
+  const args = message.content.split(" ");
+  const guildId = args[1];
+  const requestedAmount = parseInt(args[2]);
+
+  if (!guildId) {
+    isProcessing = false;
+    return message.reply("Provide a Server ID to add members to").catch(() => {});
+  }
+
+  if (blacklistedServers.has(guildId)) {
+    isProcessing = false;
+    return message.reply("🚫 This server is blacklisted and cannot be joined.").catch(() => {});
+  }
+
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) {
+    isProcessing = false;
+    return message.reply("Cannot add members as I am not in that server, add me through <#1417388718209368074>").catch(() => {});
+  }
+
+  message.reply("Started adding members to your server.. please wait..").catch(() => {});
+  const member = await message.guild.members.fetch(message.author.id);
+  const userRoles = member.roles.cache.map((r) => r.id);
+
+  let membersToAdd = 0;
+  if (userRoles.includes(ROLE_IDS.admin)) {
+    if (!isNaN(requestedAmount) && requestedAmount > 0) {
+      membersToAdd = requestedAmount;
+    } else {
+      membersToAdd = "ALL";
+    }
+  } else if (
+    userRoles.includes(ROLE_IDS.bronze) ||
+    userRoles.includes(ROLE_IDS.statusCodeRole)
+  ) {
+    membersToAdd = 4;
+  } else if (userRoles.includes(ROLE_IDS.silver)) {
+    membersToAdd = 10;
+  } else if (userRoles.includes(ROLE_IDS.gold)) {
+    membersToAdd = 15;
+  } else if (userRoles.includes(ROLE_IDS.platinum)) {
+    membersToAdd = 25;
+  } else if (userRoles.includes(ROLE_IDS.diamond)) {
+    membersToAdd = 30;
+  } else if (userRoles.includes(ROLE_IDS.member)) {
+    membersToAdd = 2;
+  } else {
+    isProcessing = false;
+    return message.reply("You don’t have a valid role to use this command.").catch(() => {});
+  }
+
+  const allUsers = getAllUsers();
+  let users = [];
+
+  if (membersToAdd === "ALL") {
+    users = allUsers;
+  } else {
+    users = allUsers.sort(() => 0.5 - Math.random()).slice(0, membersToAdd);
+  }
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const u of users) {
+    let accessToken = u.access_token;
+
+    const attemptAdd = async (token) => {
+      const res = await fetch(
+        `https://discord.com/api/guilds/${guildId}/members/${u.id}`,
+        {
           method: "PUT",
           headers: {
             Authorization: `Bot ${process.env.BOT_TOKEN}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ access_token: accessToken }),
-        });
-
-        if (res.ok) {
-          successCount++;
-          added = true;
+          body: JSON.stringify({ access_token: token }),
         }
-      } catch {}
+      );
 
-      // Retry with refreshed token if first failed
-      if (!added) {
+      if (res.ok) return "success";
+
+      const errText = await res.text();
+      if (res.status === 401 || res.status === 403) {
+        // invalid token / forbidden
+        console.error(`❌ Invalid token for ${u.id}, removing`);
+        removeUser(u.id);
+        return "remove";
+      } else if (res.status === 404) {
+        throw new Error("Bot removed from guild");
+      } else {
+        console.error(`⚠️ Temporary error for ${u.id}: ${res.status} - ${errText}`);
+        return "retry";
+      }
+    };
+
+    try {
+      let result = await attemptAdd(accessToken);
+
+      if (result === "retry") {
         try {
           const tokens = await refreshToken(u.refresh_token);
           accessToken = tokens.access_token;
           saveUser(u.id, tokens.access_token, tokens.refresh_token, tokens.expires_in);
 
-          const retry = await fetch(`https://discord.com/api/guilds/${guildId}/members/${u.id}`, {
-            method: "PUT",
-            headers: {
-              Authorization: `Bot ${process.env.BOT_TOKEN}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ access_token: accessToken }),
-          });
-
-          if (retry.ok) {
-            console.log(`✅ Retried and added ${u.id}`);
-            successCount++;
-            added = true;
-          }
+          result = await attemptAdd(accessToken);
         } catch (err) {
-          console.error(`❌ Failed retry for ${u.id}`, err);
+          console.error(`❌ Failed to refresh for ${u.id}`, err);
         }
       }
 
-      if (!added) {
-        console.error(`❌ Failed to add ${u.id}, removing from DB`);
-        removeUser(u.id);
+      if (result === "success") {
+        console.log(`✅ Added ${u.id}`);
+        successCount++;
+      } else if (result === "remove") {
         failCount++;
       }
-
-      await new Promise((r) => setTimeout(r, 2500));
+    } catch (err) {
+      console.error("❌ Critical error:", err.message);
+      await message.reply("⚠️ Bot was removed from the server during the process, stopping.").catch(() => {});
+      break;
     }
 
-    const embed = new EmbedBuilder()
-      .setTitle("👥 Members Report")
-      .addFields(
-        { name: "Total Attempted", value: `${users.length}`, inline: true },
-        { name: "✅ Successful", value: `${successCount}`, inline: true },
-        { name: "❌ Failed", value: `${failCount}`, inline: true },
-        { name: "Server ID", value: guildId, inline: true }
-      )
-      .setColor(0xffcc00)
-      .setFooter({ text: "Powered by Mr. Vultorex" });
-
-    await message.reply({ embeds: [embed] }).catch(() => {
-      console.error("❌ Failed to send join report embed");
-    });
-
-    isProcessing = false;
-  } catch (err) {
-    console.error("❌ Error in messageCreate handler:", err);
-    isProcessing = false;
+    await new Promise((r) => setTimeout(r, 2500));
   }
+
+  const embed = new EmbedBuilder()
+    .setTitle("👥 Members Report")
+    .addFields(
+      { name: "Total Attempted", value: `${users.length}`, inline: true },
+      { name: "✅ Successful", value: `${successCount}`, inline: true },
+      { name: "❌ Failed", value: `${failCount}`, inline: true },
+      { name: "Server ID", value: guildId, inline: true }
+    )
+    .setColor(0xffcc00)
+    .setFooter({ text: "Powered by Mr. Vultorex" });
+
+  await message.reply({ embeds: [embed] }).catch(() => {});
+  isProcessing = false;
 });
 
 // --- Express Routes ---
@@ -306,7 +307,9 @@ app.get("/", (req, res) => {
   }&redirect_uri=${encodeURIComponent(
     process.env.REDIRECT_URI
   )}&response_type=code&scope=identify%20guilds.join`;
-  res.send(`<h1>Authorize Bot</h1><a href="${oauthUrl}">Login with Discord</a>`);
+  res.send(
+    `<h1>Authorize Bot</h1><a href="${oauthUrl}">Login with Discord</a>`
+  );
 });
 
 app.get("/callback", async (req, res) => {
@@ -324,9 +327,7 @@ app.get("/callback", async (req, res) => {
     const channelId = "1417345946874019890";
     const channel = client.channels.cache.get(channelId);
     if (channel) {
-      channel.send(`✅ **${user.username}** just authorized the bot!`).catch(() => {
-        console.error("❌ Could not send authorization message to channel");
-      });
+      channel.send(`✅ **${user.username}** just authorized the bot!`).catch(() => {});
     }
 
     res.send(`<h2>✅ Authorized ${user.username}#${user.discriminator}</h2>`);
