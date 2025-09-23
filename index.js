@@ -147,6 +147,28 @@ client.on("messageCreate", async (message) => {
     return message.reply(`🚫 Server \`${serverId}\` has been blacklisted.`).catch(() => {});
   }
 
+  // !remove <userId>
+  if (message.content.startsWith("!remove")) {
+    const member = await message.guild.members.fetch(message.author.id);
+    if (!member.roles.cache.has(ROLE_IDS.admin)) {
+      return message.reply("You are not allowed to use this command!").catch(() => {});
+    }
+
+    const args = message.content.split(" ");
+    const userId = args[1];
+    if (!userId) {
+      return message.reply("Provide a user ID to remove.").catch(() => {});
+    }
+
+    try {
+      removeUser(userId);
+      return message.reply(`🗑️ User \`${userId}\` has been removed from the database.`).catch(() => {});
+    } catch (err) {
+      console.error("❌ Error removing user:", err);
+      return message.reply("⚠️ Failed to remove user.").catch(() => {});
+    }
+  }
+
   // --- !djoin <serverId> <amount?> ---
   if (!message.content.startsWith("!djoin")) return;
   if (message.channel.id !== "1413408778044309554" && message.author.id !== "1385642412252201102") {
@@ -243,43 +265,28 @@ client.on("messageCreate", async (message) => {
 
       const errText = await res.text();
       if (res.status === 401 || res.status === 403) {
-        // invalid token / forbidden
         console.error(`❌ Invalid token for ${u.id}, removing`);
         removeUser(u.id);
         return "remove";
-      } else if (res.status === 404) {
-        throw new Error("Bot removed from guild");
       } else {
-        console.error(`⚠️ Temporary error for ${u.id}: ${res.status} - ${errText}`);
-        return "retry";
+        console.error(`⚠️ Failed to add ${u.id}: ${res.status} - ${errText}`);
+        return "skip";
       }
     };
 
     try {
       let result = await attemptAdd(accessToken);
 
-      if (result === "retry") {
-        try {
-          const tokens = await refreshToken(u.refresh_token);
-          accessToken = tokens.access_token;
-          saveUser(u.id, tokens.access_token, tokens.refresh_token, tokens.expires_in);
-
-          result = await attemptAdd(accessToken);
-        } catch (err) {
-          console.error(`❌ Failed to refresh for ${u.id}`, err);
-        }
-      }
-
-      if (result === "success") {
-        console.log(`✅ Added ${u.id}`);
-        successCount++;
+      if (result === "skip") {
+        failCount++;
       } else if (result === "remove") {
         failCount++;
+      } else if (result === "success") {
+        successCount++;
+        console.log(`✅ Added ${u.id}`);
       }
     } catch (err) {
       console.error("❌ Critical error:", err.message);
-      await message.reply("⚠️ Bot was removed from the server during the process, stopping.").catch(() => {});
-      break;
     }
 
     await new Promise((r) => setTimeout(r, 2500));
