@@ -9,18 +9,18 @@ const {
   ButtonBuilder,
   ButtonStyle,
 } = require("discord.js");
+
+// --- Import database functions ---
 const {
   initializeSync,
-  ensureLocalBlacklist
-} = require("./database");
-const {
-  exchangeCode,
-  getUserInfo,
-  saveUser,
-  getAllUsers,
-  refreshToken,
   removeUser,
-} = require("./auth");
+  getAllUsers,
+  saveUser,
+} = require("./database");
+
+// --- Import OAuth functions ---
+const { exchangeCode, getUserInfo } = require("./auth");
+
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
@@ -32,11 +32,9 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildPresences,
   ],
   partials: [Partials.User, Partials.GuildMember],
 });
-
 const ROLE_IDS = {
   bronze: "1417374172719349813",
   silver: "1417374180889858143",
