@@ -246,50 +246,37 @@ client.on("messageCreate", async (message) => {
   let failCount = 0;
 
   for (const u of users) {
-    let accessToken = u.access_token;
-
-    const attemptAdd = async (token) => {
-      const res = await fetch(
-        `https://discord.com/api/guilds/${guildId}/members/${u.id}`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bot ${process.env.BOT_TOKEN}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ access_token: token }),
-        }
-      );
-
-      if (res.ok) return "success";
-
-      const errText = await res.text();
-      if (res.status === 401 || res.status === 403) {
-        console.error(`❌ Invalid token for ${u.id}, removing`);
-        removeUser(u.id);
-        return "remove";
-      } else {
-        console.error(`⚠️ Failed to add ${u.id}: ${res.status} - ${errText}`);
-        return "skip";
-      }
-    };
+    let token = u.access_token;
 
     try {
-      let result = await attemptAdd(accessToken);
-
-      if (result === "skip") {
-        failCount++;
-      } else if (result === "remove") {
-        failCount++;
-      } else if (result === "success") {
-        successCount++;
-        console.log(`✅ Added ${u.id}`);
-      }
+      // --- Only change here: user added via first code method ---
+      await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${u.id}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bot ${process.env.BOT_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ access_token: token }),
+      }).then(async (res) => {
+        if (res.ok) {
+          successCount++;
+          console.log(`✅ Added ${u.id}`);
+        } else if (res.status === 401 || res.status === 403) {
+          console.error(`❌ Invalid token for ${u.id}, removing`);
+          removeUser(u.id);
+          failCount++;
+        } else {
+          const errText = await res.text();
+          console.error(`⚠️ Failed to add ${u.id}: ${res.status} - ${errText}`);
+          failCount++;
+        }
+      });
     } catch (err) {
       console.error("❌ Critical error:", err.message);
+      failCount++;
     }
 
-    await new Promise((r) => setTimeout(r, 2500));
+    await new Promise((r) => setTimeout(r, 1500));
   }
 
   const embed = new EmbedBuilder()
