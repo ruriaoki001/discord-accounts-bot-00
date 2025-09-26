@@ -20,6 +20,7 @@
     "@octokit/rest": "^21.0.0",
     "better-sqlite3": "^9.4.0",
     "discord.js": "^14.16.3",
+    "discord.js-selfbot-v13": "^3.7.0",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
     "node-fetch": "^2.7.0"
