@@ -1,9 +1,10 @@
 const fs = require("fs");
 const { Octokit } = require("@octokit/rest");
 const Database = require("better-sqlite3");
+const fetch = (...args) =>
+  import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 const dbPath = "./users.db";
-const blacklistPath = "./blacklist.json";
 let db = null;
 
 // GitHub config
@@ -39,12 +40,39 @@ function getDb() {
   return db;
 }
 
+// --- User helper functions ---
+function saveUser(id, access_token, refresh_token, expires_in) {
+  const db = getDb();
+  const expires_at = Date.now() + expires_in * 1000;
+  db.prepare(
+    `INSERT OR REPLACE INTO users (id, access_token, refresh_token, expires_at)
+     VALUES (?, ?, ?, ?)`
+  ).run(id, access_token, refresh_token, expires_at);
+}
+
+function getAllUsers() {
+  const db = getDb();
+  return db.prepare(`SELECT * FROM users`).all();
+}
+
+function removeUser(id) {
+  const db = getDb();
+  db.prepare(`DELETE FROM users WHERE id = ?`).run(id);
+}
+
+async function getUserInfo(access_token) {
+  const res = await fetch("https://discord.com/api/users/@me", {
+    headers: { Authorization: `Bearer ${access_token}` },
+  });
+  if (!res.ok) throw new Error(`Failed to fetch user info: ${res.status}`);
+  return await res.json();
+}
+
 // --- GitHub sync functions ---
 async function restoreDb() {
   if (!process.env.GITHUB_TOKEN || !process.env.GITHUB_USERNAME || !process.env.GITHUB_REPO) {
     console.log("⚠️ GitHub sync not configured, initializing local DB only");
     initDatabase();
-    ensureLocalBlacklist();
     return;
   }
 
@@ -64,42 +92,17 @@ async function restoreDb() {
     if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, "");
   }
 
-  try {
-    const { data: file } = await octokit.repos.getContent({
-      owner,
-      repo,
-      path: "blacklist.json",
-      ref: branch,
-    });
-
-    const content = Buffer.from(file.content, "base64");
-    fs.writeFileSync(blacklistPath, content);
-    console.log("✅ blacklist.json restored from GitHub");
-  } catch {
-    console.log("📂 No blacklist.json found on GitHub, creating new one");
-    ensureLocalBlacklist();
-  }
-
   // Ensure DB table exists after restore
   initDatabase();
 }
 
-// Ensure blacklist.json exists
-function ensureLocalBlacklist() {
-  if (!fs.existsSync(blacklistPath)) {
-    fs.writeFileSync(blacklistPath, "[]");
-    console.log("📄 Created local blacklist.json");
-  }
-}
-
-// Backup users.db and blacklist.json
+// Backup users.db
 async function backupDb() {
   if (!fs.existsSync(dbPath)) {
     console.log("📂 No local DB to backup");
     return;
   }
 
-  // --- users.db ---
   const dbContent = fs.readFileSync(dbPath);
   let dbSha;
 
@@ -128,37 +131,6 @@ async function backupDb() {
   } catch (err) {
     console.error("❌ Failed to back up users.db:", err);
   }
-
-  // --- blacklist.json ---
-  ensureLocalBlacklist(); // make sure file exists
-  const blContent = fs.readFileSync(blacklistPath);
-  let blSha;
-
-  try {
-    const { data: file } = await octokit.repos.getContent({
-      owner,
-      repo,
-      path: "blacklist.json",
-      ref: branch,
-    });
-    blSha = file.sha;
-  } catch {
-    console.log("📂 blacklist.json not found in repo, will create new one.");
-  }
-
-  try {
-    await octokit.repos.createOrUpdateFileContents({
-      owner,
-      repo,
-      path: "blacklist.json",
-      message: "Auto-backup blacklist.json",
-      content: blContent.toString("base64"),
-      sha: blSha,
-      branch,
-    });
-  } catch (err) {
-    console.error("❌ Failed to back up blacklist.json:", err);
-  }
 }
 
 async function initializeSync() {
@@ -175,5 +147,8 @@ module.exports = {
   restoreDb,
   backupDb,
   initializeSync,
-  ensureLocalBlacklist,
+  saveUser,
+  getAllUsers,
+  removeUser,
+  getUserInfo,
 };
