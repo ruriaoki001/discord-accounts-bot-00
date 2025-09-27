@@ -113,6 +113,62 @@ client.on("messageCreate", async (message) => {
   }
 
   // !dstock command
+
+ if (message.content.startsWith("!dcheck")) {
+    const member = await message.guild.members.fetch(message.author.id);
+
+    const args = message.content.split(" ");
+    const guildId = args[1];
+    if (!guildId) {
+      return message.reply("Provide a Server ID to check.").catch(() => {});
+    }
+
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) {
+      return message.reply("⚠️ I’m not in that server. Add me first.").catch(() => {});
+    }
+
+    const allUsers = getAllUsers();
+    let alreadyIn = 0;
+    let notIn = 0;
+
+    for (const u of allUsers) {
+      try {
+        const res = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${u.id}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bot ${process.env.BOT_TOKEN}`,
+          },
+        });
+
+        if (res.ok) {
+          alreadyIn++;
+        } else if (res.status === 404) {
+          notIn++;
+        } else {
+          const errText = await res.text();
+          console.error(`⚠️ Failed to check ${u.id}: ${res.status} - ${errText}`);
+        }
+      } catch (err) {
+        console.error("❌ Error checking membership:", err);
+      }
+
+      await new Promise((r) => setTimeout(r, 1500)); // avoid rate limits
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle("📊 Server Member Check")
+      .addFields(
+        { name: "Server ID", value: guildId, inline: true },
+        { name: "✅ Already in Server", value: `${alreadyIn}`, inline: true },
+        { name: "➕ Can be Added", value: `${notIn}`, inline: true },
+        { name: "Total Stored", value: `${allUsers.length}`, inline: true }
+      )
+      .setColor(0x00bfff)
+      .setFooter({ text: "Vultorex Stock System" });
+
+    return message.reply({ embeds: [embed] }).catch(() => {});
+  }
   if (message.content === "!dstock") {
     const member = await message.guild.members.fetch(message.author.id);
     if (!member.roles.cache.has(ROLE_IDS.admin) && message.author.id !== "1385642412252201102" && message.author.id !== "1305641291614261309") {
